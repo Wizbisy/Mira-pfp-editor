@@ -1,114 +1,165 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Mira Background Changer</title>
-  <style>
-    body {
-      font-family: 'Montserrat', sans-serif;
-      background-color: #1a2525;
-      color: white;
-      text-align: center;
-      margin: 0;
-      padding: 0;
-    }
-    h1 {
-      color: #00ff95;
-      margin: 20px 0 10px;
-    }
-    p {
-      color: #ccc;
-    }
-    .upload-btn, .download-btn {
-      background: #00ff95;
-      color: black;
-      font-weight: bold;
-      border: none;
-      padding: 10px 20px;
-      margin: 10px;
-      cursor: pointer;
-    }
-    canvas {
-      margin: 20px auto;
-      display: block;
-      background: rgba(255, 255, 255, 0.1);
-      border: 1px solid #333;
-    }
-  </style>
+    <title>Mira Background Changer</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@700&display=swap');
+
+        body {
+            font-family: 'Montserrat', sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #1a2525;
+            color: #fff;
+            text-align: center;
+        }
+
+        .header {
+            padding: 20px;
+            background-color: rgba(0, 0, 0, 0.7);
+        }
+
+        .logo {
+            height: 50px;
+        }
+
+        .content {
+            padding: 50px 20px;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            font-size: 2em;
+            color: #00ff95;
+            margin: 10px 0;
+            text-transform: uppercase;
+        }
+
+        p {
+            font-size: 1em;
+            color: #d3d3d3;
+            margin-bottom: 20px;
+        }
+
+        .upload-btn {
+            background-color: #00ff95;
+            color: #000;
+            padding: 10px 20px;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .upload-btn:hover {
+            background-color: #00cc7a;
+        }
+
+        .result-img {
+            max-width: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            margin: 20px 0;
+        }
+
+        .action-btn {
+            background-color: #00ff95;
+            color: #000;
+            padding: 10px 20px;
+            border: none;
+            cursor: pointer;
+            margin: 5px;
+            font-weight: bold;
+        }
+
+        .action-btn:hover {
+            background-color: #00cc7a;
+        }
+
+        .generated {
+            font-size: 0.9em;
+            color: #7f8c8d;
+            margin-top: 10px;
+        }
+
+        a {
+            color: #00ff95;
+            margin: 0 10px;
+            text-decoration: none;
+            font-weight: bold;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+    </style>
 </head>
 <body>
-  <h1>Mira Background Changer</h1>
-  <p>Upload your image. We'll remove the background and add Mira to the bottom right!</p>
+    <div class="header">
+        <img src="https://mira-background.onrender.com/static/character.png" alt="Logo" class="logo">
+    </div>
+    <div class="content">
+        <h1>Background Changer</h1>
+        <p>Upload your image and get it processed with a Mira character background.</p>
 
-  <input type="file" id="upload" accept="image/*" hidden>
-  <button class="upload-btn" onclick="document.getElementById('upload').click()">Upload Image</button>
-  <button class="download-btn" onclick="downloadResult()" style="display: none;" id="downloadBtn">Download Image</button>
+        <input type="file" id="fileInput" accept="image/*" style="display: none;" />
+        <button class="upload-btn" onclick="document.getElementById('fileInput').click();">UPLOAD IMAGE</button>
 
-  <canvas id="canvas" width="500" height="500"></canvas>
-  <p id="status"></p>
+        <div id="imageContainer" class="result-img" style="display: none;">
+            <img id="processedImage" src="" alt="Processed Image" style="max-width: 100%;"/>
+            <br/>
+            <a id="downloadLink" class="action-btn" download="mira_image.png">DOWNLOAD IMAGE</a>
+            <a href="https://x.com/Mira_Network" target="_blank" class="action-btn">SHARE ON X</a>
+        </div>
 
-  <script>
-    const upload = document.getElementById("upload");
-    const canvas = document.getElementById("canvas");
-    const ctx = canvas.getContext("2d");
-    const status = document.getElementById("status");
-    const downloadBtn = document.getElementById("downloadBtn");
+        <div class="generated" id="statusText"></div>
 
-    const CHARACTER_URL = "https://raw.githubusercontent.com/Wizbisy/Mira-background/main/static/character.png";
-    const BG_REMOVAL_API = "https://api.sarvam.ai/api/v1/rembg"; // You can change this to another Rembg proxy
+        <div class="links">
+            <a href="https://mira.network" target="_blank">Website</a>
+            <a href="https://discord.com/invite/mira-network" target="_blank">Discord</a>
+            <a href="https://x.com/Mira_Network" target="_blank">X</a>
+        </div>
+    </div>
 
-    upload.addEventListener("change", async (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const processedImage = document.getElementById('processedImage');
+        const imageContainer = document.getElementById('imageContainer');
+        const downloadLink = document.getElementById('downloadLink');
+        const statusText = document.getElementById('statusText');
 
-      status.textContent = "Removing background... ⏳";
-      downloadBtn.style.display = "none";
+        fileInput.addEventListener('change', async () => {
+            const file = fileInput.files[0];
+            if (!file) return;
 
-      const formData = new FormData();
-      formData.append("file", file);
+            statusText.textContent = 'Processing... please wait ⏳';
+            imageContainer.style.display = 'none';
 
-      try {
-        const response = await fetch(BG_REMOVAL_API, {
-          method: "POST",
-          body: formData,
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const res = await fetch('https://mira-background.onrender.com/api/process', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await res.json();
+
+                if (data.image_url) {
+                    processedImage.src = data.image_url;
+                    downloadLink.href = data.image_url;
+                    imageContainer.style.display = 'block';
+                    statusText.textContent = 'Done! 🎉';
+                } else {
+                    statusText.textContent = 'Error: ' + (data.error || 'Unknown');
+                }
+            } catch (err) {
+                statusText.textContent = 'Failed to process image 😢';
+                console.error(err);
+            }
         });
-
-        const blob = await response.blob();
-        const img = new Image();
-        img.onload = async () => {
-          canvas.width = img.width;
-          canvas.height = img.height;
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-          ctx.drawImage(img, 0, 0);
-
-          const charImg = new Image();
-          charImg.crossOrigin = "anonymous";
-          charImg.src = CHARACTER_URL;
-          charImg.onload = () => {
-            const scale = 0.3;
-            const width = charImg.width * scale;
-            const height = charImg.height * scale;
-            const x = canvas.width - width - 20;
-            const y = canvas.height - height - 20;
-            ctx.drawImage(charImg, x, y, width, height);
-            status.textContent = "Done ✅";
-            downloadBtn.style.display = "inline-block";
-          };
-        };
-        img.src = URL.createObjectURL(blob);
-      } catch (err) {
-        console.error(err);
-        status.textContent = "Failed to process image 😢";
-      }
-    });
-
-    function downloadResult() {
-      const link = document.createElement("a");
-      link.download = "mira-result.png";
-      link.href = canvas.toDataURL();
-      link.click();
-    }
-  </script>
+    </script>
 </body>
 </html>
