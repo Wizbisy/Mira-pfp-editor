@@ -1,196 +1,129 @@
 import os
-from flask import Flask, request, jsonify
-from flask_cors import CORS
-import cv2
-import numpy as np
-from tempfile import NamedTemporaryFile
 import uuid
 import time
 import shutil
+import cv2
+import numpy as np
+from tempfile import NamedTemporaryFile
+from flask import Flask, request, jsonify, send_from_directory, send_file
+from flask_cors import CORS
 
 app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
+# Folder paths
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-UPLOAD_FOLDER = os.path.join('/tmp', 'uploads')
-OUTPUT_FOLDER = os.path.join('/tmp', 'static/output')
-PUBLIC_STATIC_DIR = os.path.join('/tmp', 'public/static')
-BACKGROUND_PATH = os.path.join(PUBLIC_STATIC_DIR, 'custom_background.jpg')
-CHARACTER_PATH = os.path.join(PUBLIC_STATIC_DIR, 'character.png')
+ROOT_DIR = os.path.abspath(os.path.join(BASE_DIR, ".."))
+UPLOAD_FOLDER = os.path.join("/tmp", "uploads")
+OUTPUT_FOLDER = os.path.join("/tmp", "static", "output")
+STATIC_FOLDER = os.path.join(ROOT_DIR, "static")
+INDEX_HTML = os.path.join(ROOT_DIR, "index.html")
+BACKGROUND_PATH = os.path.join(STATIC_FOLDER, "custom_background.jpg")
+CHARACTER_PATH = os.path.join(STATIC_FOLDER, "character.png")
 
-for folder in (UPLOAD_FOLDER, OUTPUT_FOLDER):
-    os.makedirs(folder, exist_ok=True)
+# Create temp folders
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 
+# Helpers
 def cleanup_old_files(folder, max_age_seconds=3600):
-    current_time = time.time()
-    for filename in os.listdir(folder):
-        file_path = os.path.join(folder, filename)
-        if os.path.isfile(file_path) and os.path.getmtime(file_path) < current_time - max_age_seconds:
+    now = time.time()
+    for f in os.listdir(folder):
+        path = os.path.join(folder, f)
+        if os.path.isfile(path) and os.path.getmtime(path) < now - max_age_seconds:
             try:
-                os.remove(file_path)
-                print(f"Deleted old file: {file_path}")
+                os.remove(path)
             except Exception as e:
-                print(f"Error deleting {file_path}: {e}")
-
-def copy_static_files():
-    if not os.path.exists(PUBLIC_STATIC_DIR):
-        os.makedirs(PUBLIC_STATIC_DIR)
-    source_static_dir = os.path.join(BASE_DIR, '../../public/static')
-    for file in ['custom_background.jpg', 'character.png']:
-        source = os.path.join(source_static_dir, file)
-        dest = os.path.join(PUBLIC_STATIC_DIR, file)
-        if os.path.exists(source):
-            shutil.copy2(source, dest)
-            print(f"Copied {file} to {dest}")
-        else:
-            print(f"Source {source} not found")
+                print(f"❌ Failed to delete {path}: {e}")
 
 def remove_background(image_path):
-    copy_static_files()
     image = cv2.imread(image_path)
     if image is None:
-        raise ValueError("Failed to load image")
+        raise ValueError("Failed to read image")
 
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     _, binary = cv2.threshold(gray, 1, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
     contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
     mask = np.zeros_like(gray)
     cv2.drawContours(mask, contours, -1, (255), thickness=cv2.FILLED)
 
     result = cv2.bitwise_and(image, image, mask=mask)
 
     if not os.path.exists(BACKGROUND_PATH):
-        raise FileNotFoundError("Custom background image not found")
+        raise FileNotFoundError("Background not found")
     background = cv2.imread(BACKGROUND_PATH)
     background = cv2.resize(background, (image.shape[1], image.shape[0]))
-
     background = cv2.bitwise_and(background, background, mask=cv2.bitwise_not(mask))
-    final_result = cv2.add(result, background)
+    final = cv2.add(result, background)
 
     if os.path.exists(CHARACTER_PATH):
         character = cv2.imread(CHARACTER_PATH, cv2.IMREAD_UNCHANGED)
-        if character is not None:
-            char_height, char_width = character.shape[:2]
+        if character is not None and character.shape[2] == 4:
             char_scale = 0.3
             char_width = int(image.shape[1] * char_scale)
-            char_height = int(char_height * (char_width / char_width))
-            character = cv2.resize(character, (char_width, char_height), cv2.INTER_AREA)
+            char_height = int(character.shape[0] * (char_width / character.shape[1]))
+            character = cv2.resize(character, (char_width, char_height), interpolation=cv2.INTER_AREA)
+
             x, y = image.shape[1] - char_width - 20, image.shape[0] - char_height - 20
-            if character.shape[2] == 4:
-                alpha_mask = character[:, :, 3] / 255.0
-                for c in range(0, 3):
-                    final_result[y:y+char_height, x:x+char_width, c] = (
-                        (1.0 - alpha_mask) * final_result[y:y+char_height, x:x+char_width, c] +
-                        alpha_mask * character[:, :, c]
-                    )
+            alpha = character[:, :, 3] / 255.0
+            for c in range(3):
+                final[y:y+char_height, x:x+char_width, c] = (
+                    (1. - alpha) * final[y:y+char_height, x:x+char_width, c] +
+                    alpha * character[:, :, c]
+                )
 
-    return final_result
+    return final
 
-@app.route('/')
-def home():
-    return jsonify({"message": "Mira Background API is running ✅"}), 200
+# === Routes ===
 
-@app.route('/api/process', methods=['POST'])
+@app.route("/")
+def serve_frontend():
+    return send_file(INDEX_HTML)
+
+@app.route("/static/<path:path>")
+def serve_static(path):
+    return send_from_directory(STATIC_FOLDER, path)
+
+@app.route("/static/output/<filename>")
+def serve_output(filename):
+    return send_file(os.path.join(OUTPUT_FOLDER, filename), mimetype="image/jpeg")
+
+@app.route("/api/process", methods=["POST"])
 def process_image():
     try:
         cleanup_old_files(UPLOAD_FOLDER)
         cleanup_old_files(OUTPUT_FOLDER)
 
-        if 'file' not in request.files:
+        file = request.files.get("file")
+        if not file or file.filename == "":
             return jsonify({"error": "No file uploaded"}), 400
-
-        file = request.files['file']
-        if not file.filename:
-            return jsonify({"error": "Empty filename"}), 400
 
         file.seek(0, os.SEEK_END)
         if file.tell() > 2 * 1024 * 1024:
             return jsonify({"error": "Image must be under 2MB"}), 400
         file.seek(0)
 
-        temp_file = NamedTemporaryFile(delete=False, dir=UPLOAD_FOLDER)
-        temp_file_path = temp_file.name
-        file.save(temp_file_path)
+        tmp = NamedTemporaryFile(delete=False, dir=UPLOAD_FOLDER)
+        file.save(tmp.name)
 
-        output_image = remove_background(temp_file_path)
+        result = remove_background(tmp.name)
+        os.remove(tmp.name)
 
-        unique_name = f"{uuid.uuid4().hex}.jpg"
-        output_path = os.path.join(OUTPUT_FOLDER, unique_name)
-        cv2.imwrite(output_path, output_image)
+        filename = f"{uuid.uuid4().hex}.jpg"
+        out_path = os.path.join(OUTPUT_FOLDER, filename)
+        cv2.imwrite(out_path, result)
 
-        os.remove(temp_file_path)
-
-        return jsonify({"image_url": f"/static/output/{unique_name}"})
+        return jsonify({"image_url": f"/static/output/{filename}"})
 
     except Exception as e:
-        print(f"🔥 Error: {e}")
+        print("🔥 ERROR:", e)
         return jsonify({"error": str(e)}), 500
 
-@app.route('/static/output/<filename>')
-def serve_image(filename):
-    return send_file(os.path.join(OUTPUT_FOLDER, filename), mimetype='image/jpeg')
+# Optional: for health check
+@app.route("/api/hello")
+def hello():
+    return jsonify({"message": "Mira Background Changer is live ✅"}), 200
 
-def handler(event, context):
-    import io
-    from urllib.parse import parse_qs
-
-    if event.get('httpMethod') == 'GET':
-        if event.get('path') == '/':
-            return {
-                'statusCode': 200,
-                'body': jsonify({"message": "Mira Background API is running ✅"}).data.decode('utf-8'),
-                'headers': {'Content-Type': 'application/json'}
-            }
-        elif event.get('path').startswith('/static/output/'):
-            filename = event['path'].replace('/static/output/', '')
-            file_path = os.path.join(OUTPUT_FOLDER, filename)
-            if os.path.exists(file_path):
-                with open(file_path, 'rb') as f:
-                    return {
-                        'statusCode': 200,
-                        'body': f.read().decode('utf-8') if filename.endswith('.txt') else f.read(),
-                        'headers': {'Content-Type': 'image/jpeg' if filename.endswith('.jpg') else 'application/octet-stream'}
-                    }
-            return {'statusCode': 404, 'body': 'File not found'}
-
-    elif event.get('httpMethod') == 'POST' and event.get('path') == '/api/process':
-        try:
-            cleanup_old_files(UPLOAD_FOLDER)
-            cleanup_old_files(OUTPUT_FOLDER)
-
-            if 'file' not in event.get('multiValueHeaders', {}):
-                return {'statusCode': 400, 'body': jsonify({"error": "No file uploaded"}).data.decode('utf-8'), 'headers': {'Content-Type': 'application/json'}}
-
-            body = event.get('body')
-            if not body:
-                return {'statusCode': 400, 'body': jsonify({"error": "Empty filename"}).data.decode('utf-8'), 'headers': {'Content-Type': 'application/json'}}
-
-            import base64
-            file_data = base64.b64decode(parse_qs(body)['file'][0])
-            file.seek(0, os.SEEK_END)
-            if file.tell() > 2 * 1024 * 1024:
-                return {'statusCode': 400, 'body': jsonify({"error": "Image must be under 2MB"}).data.decode('utf-8'), 'headers': {'Content-Type': 'application/json'}}
-            file.seek(0)
-
-            temp_file = NamedTemporaryFile(delete=False, dir=UPLOAD_FOLDER)
-            temp_file_path = temp_file.name
-            with open(temp_file_path, 'wb') as f:
-                f.write(file_data)
-
-            output_image = remove_background(temp_file_path)
-
-            unique_name = f"{uuid.uuid4().hex}.jpg"
-            output_path = os.path.join(OUTPUT_FOLDER, unique_name)
-            cv2.imwrite(output_path, output_image)
-
-            os.remove(temp_file_path)
-
-            return {'statusCode': 200, 'body': jsonify({"image_url": f"/static/output/{unique_name}"}).data.decode('utf-8'), 'headers': {'Content-Type': 'application/json'}}
-
-        except Exception as e:
-            print(f"🔥 Error: {e}")
-            return {'statusCode': 500, 'body': jsonify({"error": str(e)}).data.decode('utf-8'), 'headers': {'Content-Type': 'application/json'}}
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+# Local debug
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000, debug=True)
