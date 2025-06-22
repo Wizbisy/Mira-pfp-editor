@@ -1,81 +1,228 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Mira Background Changer</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      background-color: #f0f0f0;
-      margin: 0;
-      padding: 20px;
-    }
-    .container {
-      background: white;
-      padding: 20px;
-      border-radius: 10px;
-      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-      text-align: center;
-      width: 100%;
-      max-width: 500px;
-    }
-    input[type="file"] {
-      margin: 10px 0;
-    }
-    button {
-      background-color: #4CAF50;
-      color: white;
-      padding: 10px 20px;
-      border: none;
-      border-radius: 5px;
-      cursor: pointer;
-    }
-    button:hover {
-      background-color: #45a049;
-    }
-    #result {
-      max-width: 100%;
-      margin-top: 20px;
-      border-radius: 5px;
-    }
-    .logo {
-      width: 100px;
-      height: auto;
-      border-radius: 10px;
-      margin-bottom: 20px;
-    }
-  </style>
+    <title>Mira Background Changer</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@700&display=swap');
+
+        body {
+            font-family: 'Montserrat', sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #1a2525;
+            color: #fff;
+            text-align: center;
+        }
+
+        .header {
+            padding: 20px;
+            background-color: rgba(0, 0, 0, 0.7);
+        }
+
+        .logo {
+            height: 50px;
+        }
+
+        .content {
+            padding: 50px 20px;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            font-size: 2em;
+            color: #00ff95;
+            margin: 10px 0;
+            text-transform: uppercase;
+        }
+
+        p {
+            font-size: 1em;
+            color: #d3d3d3;
+            margin-bottom: 20px;
+        }
+
+        .upload-btn {
+            background-color: #00ff95;
+            color: #000;
+            padding: 10px 20px;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .upload-btn:hover {
+            background-color: #00cc7a;
+        }
+
+        .upload-btn:disabled {
+            background-color: #7f8c8d;
+            cursor: not-allowed;
+        }
+
+        .result-img {
+            max-width: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            margin: 20px 0;
+        }
+
+        .action-btn {
+            background-color: #00ff95;
+            color: #000;
+            padding: 10px 20px;
+            border: none;
+            cursor: pointer;
+            margin: 5px;
+            font-weight: bold;
+        }
+
+        .action-btn:hover {
+            background-color: #00cc7a;
+        }
+
+        .generated {
+            font-size: 0.9em;
+            color: #7f8c8d;
+            margin-top: 10px;
+        }
+
+        a {
+            color: #00ff95;
+            margin: 0 10px;
+            text-decoration: none;
+            font-weight: bold;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+    </style>
 </head>
 <body>
-  <div class="container">
-    <img src="./static/logo.svg" alt="Mira Logo" class="logo">
-    <h2>Mira Background Changer</h2>
-    <input type="file" id="fileInput" accept="image/*">
-    <button onclick="uploadImage()">Upload</button>
-    <img id="result" style="max-width: 100%;">
-  </div>
-  <script>
-    function uploadImage() {
-      const fileInput = document.getElementById('fileInput');
-      const file = fileInput.files[0];
-      const formData = new FormData();
-      formData.append('file', file);
+    <div class="header">
+        <img src="./static/logo.svg" alt="Logo" class="logo">
+    </div>
+    <div class="content">
+        <h1>Background Changer</h1>
+        <p>Upload your image (under 2MB) and get it processed with a Mira character background.</p>
 
-      fetch('./api/process', {
-        method: 'POST',
-        body: formData
-      })
-      .then(response => response.json())
-      .then(data => {
-        if (data.image_url) document.getElementById('result').src = data.image_url;
-        else alert(data.error || 'Error processing image');
-      })
-      .catch(error => console.error('Error:', error));
-    }
-  </script>
+        <input type="file" id="fileInput" accept="image/*" style="display: none;" />
+        <button class="upload-btn" id="uploadBtn" onclick="document.getElementById('fileInput').click();">UPLOAD IMAGE</button>
+
+        <div id="imageContainer" class="result-img" style="display: none;">
+            <img id="processedImage" src="" alt="Processed Image" style="max-width: 100%;"/>
+            <br/>
+            <a id="downloadLink" class="action-btn" download="mira_image.png">DOWNLOAD IMAGE</a>
+            <a href="https://x.com/Mira_Network" target="_blank" class="action-btn">SHARE ON X</a>
+        </div>
+
+        <div class="generated" id="statusText"></div>
+
+        <div class="links">
+            <a href="https://mira.network" target="_blank">Website</a>
+            <a href="https://discord.com/invite/mira-network" target="_blank">Discord</a>
+            <a href="https://x.com/Mira_Network" target="_blank">X</a>
+        </div>
+    </div>
+
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const processedImage = document.getElementById('processedImage');
+        const imageContainer = document.getElementById('imageContainer');
+        const downloadLink = document.getElementById('downloadLink');
+        const statusText = document.getElementById('statusText');
+        const uploadBtn = document.getElementById('uploadBtn');
+
+        async function compressImage(file) {
+            return new Promise((resolve) => {
+                const img = new Image();
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    img.src = e.target.result;
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        const ctx = canvas.getContext('2d');
+                        const maxWidth = 1024; // Limit resolution
+                        const maxHeight = 1024;
+                        let width = img.width;
+                        let height = img.height;
+                        if (width > maxWidth || height > maxHeight) {
+                            const ratio = Math.min(maxWidth / width, maxHeight / height);
+                            width *= ratio;
+                            height *= ratio;
+                        }
+                        canvas.width = width;
+                        canvas.height = height;
+                        ctx.drawImage(img, 0, 0, width, height);
+                        canvas.toBlob((blob) => resolve(new File([blob], file.name, { type: 'image/png' })), 'image/png', 0.7);
+                    };
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+
+        fileInput.addEventListener('change', async () => {
+            const file = fileInput.files[0];
+            if (!file) return;
+
+            // Validate size
+            if (file.size > 2 * 1024 * 1024) {
+                statusText.textContent = 'Error: Image must be under 2MB';
+                fileInput.value = '';
+                return;
+            }
+
+            // Compress image
+            uploadBtn.disabled = true;
+            uploadBtn.textContent = 'COMPRESSING...';
+            const compressedFile = await compressImage(file);
+
+            uploadBtn.textContent = 'PROCESSING...';
+            statusText.textContent = 'Processing... please wait ⏳';
+            imageContainer.style.display = 'none';
+
+            const formData = new FormData();
+            formData.append('file', compressedFile);
+
+            try {
+                const res = await fetch('./api/process', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await res.json();
+
+                if (data.image_url) {
+                    const imgCheck = new Promise((resolve, reject) => {
+                        processedImage.onload = () => resolve();
+                        processedImage.onerror = () => reject();
+                        processedImage.src = data.image_url;
+                    });
+
+                    try {
+                        await imgCheck;
+                        downloadLink.href = data.image_url;
+                        imageContainer.style.display = 'block';
+                        statusText.textContent = 'Done! 🎉';
+                    } catch {
+                        statusText.textContent = 'Error: Processed image is no longer available 😢';
+                    }
+                } else {
+                    statusText.textContent = 'Error: ' + (data.error || 'Unknown');
+                }
+            } catch (err) {
+                statusText.textContent = 'Failed to process image 😢';
+                console.error(err);
+            } finally {
+                uploadBtn.disabled = false;
+                uploadBtn.textContent = 'UPLOAD IMAGE';
+                fileInput.value = '';
+                // Rate-limit: Re-enable button after 5 seconds
+                setTimeout(() => { uploadBtn.disabled = false; }, 5000);
+            }
+        });
+    </script>
 </body>
 </html>
