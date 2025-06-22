@@ -1,0 +1,6 @@
+Flask
+gunicorn
+opencv-python
+Pillow
+Flask-Cors
+wsgi
