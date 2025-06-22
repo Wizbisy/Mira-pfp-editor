@@ -13,8 +13,8 @@ CORS(app, resources={r"/api/*": {"origins": "*"}})
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 UPLOAD_FOLDER = os.path.join('/tmp', 'uploads')
 OUTPUT_FOLDER = os.path.join('/tmp', 'static/output')
-BACKGROUND_PATH = os.path.join(BASE_DIR, 'static/custom_background.jpg')
-CHARACTER_PATH = os.path.join(BASE_DIR, 'static/character.png')
+BACKGROUND_PATH = os.path.join('/tmp', 'public/static/custom_background.jpg')  # Adjusted for runtime fetch
+CHARACTER_PATH = os.path.join('/tmp', 'public/static/character.png')  # Adjusted for runtime fetch
 
 for folder in (UPLOAD_FOLDER, OUTPUT_FOLDER):
     os.makedirs(folder, exist_ok=True)
@@ -116,9 +116,65 @@ def serve_image(filename):
     return send_file(os.path.join(OUTPUT_FOLDER, filename), mimetype='image/jpeg')
 
 def handler(event, context):
-    from wsgi import WSGIHandler
-    wsgi_handler = WSGIHandler()
-    return wsgi_handler(event, context)
+    import io
+    from urllib.parse import parse_qs
+
+    if event.get('httpMethod') == 'GET':
+        if event.get('path') == '/':
+            return {
+                'statusCode': 200,
+                'body': jsonify({"message": "Mira Background API is running ✅"}).data.decode('utf-8'),
+                'headers': {'Content-Type': 'application/json'}
+            }
+        elif event.get('path').startswith('/static/output/'):
+            filename = event['path'].replace('/static/output/', '')
+            file_path = os.path.join(OUTPUT_FOLDER, filename)
+            if os.path.exists(file_path):
+                with open(file_path, 'rb') as f:
+                    return {
+                        'statusCode': 200,
+                        'body': f.read().decode('utf-8') if filename.endswith('.txt') else f.read(),
+                        'headers': {'Content-Type': 'image/jpeg' if filename.endswith('.jpg') else 'application/octet-stream'}
+                    }
+            return {'statusCode': 404, 'body': 'File not found'}
+
+    elif event.get('httpMethod') == 'POST' and event.get('path') == '/api/process':
+        try:
+            cleanup_old_files(UPLOAD_FOLDER)
+            cleanup_old_files(OUTPUT_FOLDER)
+
+            if 'file' not in event.get('multiValueHeaders', {}):
+                return {'statusCode': 400, 'body': jsonify({"error": "No file uploaded"}).data.decode('utf-8'), 'headers': {'Content-Type': 'application/json'}}
+
+            body = event.get('body')
+            if not body:
+                return {'statusCode': 400, 'body': jsonify({"error": "Empty filename"}).data.decode('utf-8'), 'headers': {'Content-Type': 'application/json'}}
+
+            import base64
+            file_data = base64.b64decode(parse_qs(body)['file'][0])
+            file.seek(0, os.SEEK_END)
+            if file.tell() > 2 * 1024 * 1024:
+                return {'statusCode': 400, 'body': jsonify({"error": "Image must be under 2MB"}).data.decode('utf-8'), 'headers': {'Content-Type': 'application/json'}}
+            file.seek(0)
+
+            temp_file = NamedTemporaryFile(delete=False, dir=UPLOAD_FOLDER)
+            temp_file_path = temp_file.name
+            with open(temp_file_path, 'wb') as f:
+                f.write(file_data)
+
+            output_image = remove_background(temp_file_path)
+
+            unique_name = f"{uuid.uuid4().hex}.jpg"
+            output_path = os.path.join(OUTPUT_FOLDER, unique_name)
+            cv2.imwrite(output_path, output_image)
+
+            os.remove(temp_file_path)
+
+            return {'statusCode': 200, 'body': jsonify({"image_url": f"/static/output/{unique_name}"}).data.decode('utf-8'), 'headers': {'Content-Type': 'application/json'}}
+
+        except Exception as e:
+            print(f"🔥 Error: {e}")
+            return {'statusCode': 500, 'body': jsonify({"error": str(e)}).data.decode('utf-8'), 'headers': {'Content-Type': 'application/json'}}
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
