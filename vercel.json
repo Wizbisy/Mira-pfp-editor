@@ -8,18 +8,6 @@
   ],
   "routes": [
     {
-      "src": "/api/(.*)",
-      "dest": "/api/app.py"
-    },
-    {
-      "src": "/static/output/(.*)",
-      "dest": "/api/app.py"
-    },
-    {
-      "src": "/static/(.*)",
-      "dest": "/public/static/$1"
-    },
-    {
       "src": "/(.*)",
       "dest": "/public/index.html"
     }
