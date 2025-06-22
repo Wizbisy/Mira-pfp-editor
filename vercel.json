@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "builds": [
     {
       "src": "api/app.py",
@@ -13,13 +13,11 @@
     },
     {
       "src": "/static/(.*)",
-      "dest": "/public/static/$1"
+      "dest": "/static/$1"
     },
     {
       "src": "/(.*)",
-      "dest": "/public/index.html"
+      "dest": "/index.html"
     }
-  ],
-  "public": "public"
+  ]
 }
-
