@@ -6,6 +6,7 @@ import numpy as np
 from tempfile import NamedTemporaryFile
 import uuid
 import time
+import shutil
 
 app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
@@ -13,8 +14,9 @@ CORS(app, resources={r"/api/*": {"origins": "*"}})
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 UPLOAD_FOLDER = os.path.join('/tmp', 'uploads')
 OUTPUT_FOLDER = os.path.join('/tmp', 'static/output')
-BACKGROUND_PATH = os.path.join('/tmp', 'public/static/custom_background.jpg')  # Adjusted for runtime fetch
-CHARACTER_PATH = os.path.join('/tmp', 'public/static/character.png')  # Adjusted for runtime fetch
+PUBLIC_STATIC_DIR = os.path.join('/tmp', 'public/static')
+BACKGROUND_PATH = os.path.join(PUBLIC_STATIC_DIR, 'custom_background.jpg')
+CHARACTER_PATH = os.path.join(PUBLIC_STATIC_DIR, 'character.png')
 
 for folder in (UPLOAD_FOLDER, OUTPUT_FOLDER):
     os.makedirs(folder, exist_ok=True)
@@ -30,7 +32,21 @@ def cleanup_old_files(folder, max_age_seconds=3600):
             except Exception as e:
                 print(f"Error deleting {file_path}: {e}")
 
+def copy_static_files():
+    if not os.path.exists(PUBLIC_STATIC_DIR):
+        os.makedirs(PUBLIC_STATIC_DIR)
+    source_static_dir = os.path.join(BASE_DIR, '../../public/static')
+    for file in ['custom_background.jpg', 'character.png']:
+        source = os.path.join(source_static_dir, file)
+        dest = os.path.join(PUBLIC_STATIC_DIR, file)
+        if os.path.exists(source):
+            shutil.copy2(source, dest)
+            print(f"Copied {file} to {dest}")
+        else:
+            print(f"Source {source} not found")
+
 def remove_background(image_path):
+    copy_static_files()
     image = cv2.imread(image_path)
     if image is None:
         raise ValueError("Failed to load image")
