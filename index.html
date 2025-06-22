@@ -102,11 +102,11 @@
 </head>
 <body>
     <div class="header">
-        <img src="/logo.svg" alt="Logo" class="logo">
+        <img src="/logo.png" alt="Logo" class="logo">
     </div>
     <div class="content">
         <h1>Background Changer</h1>
-        <p>Upload your image and get it processed with a Mira character background.</p>
+        <p>Upload your image (under 2MB) and get it processed with a Mira character background. First request may take up to 50 seconds due to free hosting.</p>
 
         <input type="file" id="fileInput" accept="image/*" style="display: none;" />
         <button class="upload-btn" id="uploadBtn" onclick="document.getElementById('fileInput').click();">UPLOAD IMAGE</button>
@@ -135,17 +135,56 @@
         const statusText = document.getElementById('statusText');
         const uploadBtn = document.getElementById('uploadBtn');
 
+        async function compressImage(file) {
+            return new Promise((resolve) => {
+                const img = new Image();
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    img.src = e.target.result;
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        const ctx = canvas.getContext('2d');
+                        const maxWidth = 1024; // Limit resolution
+                        const maxHeight = 1024;
+                        let width = img.width;
+                        let height = img.height;
+                        if (width > maxWidth || height > maxHeight) {
+                            const ratio = Math.min(maxWidth / width, maxHeight / height);
+                            width *= ratio;
+                            height *= ratio;
+                        }
+                        canvas.width = width;
+                        canvas.height = height;
+                        ctx.drawImage(img, 0, 0, width, height);
+                        canvas.toBlob((blob) => resolve(new File([blob], file.name, { type: 'image/png' })), 'image/png', 0.7);
+                    };
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+
         fileInput.addEventListener('change', async () => {
             const file = fileInput.files[0];
             if (!file) return;
 
+            // Validate size
+            if (file.size > 2 * 1024 * 1024) {
+                statusText.textContent = 'Error: Image must be under 2MB';
+                fileInput.value = '';
+                return;
+            }
+
+            // Compress image
             uploadBtn.disabled = true;
+            uploadBtn.textContent = 'COMPRESSING...';
+            const compressedFile = await compressImage(file);
+
             uploadBtn.textContent = 'PROCESSING...';
             statusText.textContent = 'Processing... please wait ⏳';
             imageContainer.style.display = 'none';
 
             const formData = new FormData();
-            formData.append('file', file);
+            formData.append('file', compressedFile);
 
             try {
                 const res = await fetch('https://mira-background.onrender.com/api/process', {
@@ -180,6 +219,8 @@
                 uploadBtn.disabled = false;
                 uploadBtn.textContent = 'UPLOAD IMAGE';
                 fileInput.value = '';
+                // Rate-limit: Re-enable button after 5 seconds
+                setTimeout(() => { uploadBtn.disabled = false; }, 5000);
             }
         });
     </script>
