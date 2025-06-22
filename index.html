@@ -76,6 +76,8 @@
             cursor: pointer;
             margin: 5px;
             font-weight: bold;
+            text-decoration: none;
+            display: inline-block;
         }
 
         .action-btn:hover {
@@ -88,14 +90,18 @@
             margin-top: 10px;
         }
 
-        a {
+        .links {
+            margin-top: 30px;
+        }
+
+        .links a {
             color: #00ff95;
             margin: 0 10px;
             text-decoration: none;
             font-weight: bold;
         }
 
-        a:hover {
+        .links a:hover {
             text-decoration: underline;
         }
     </style>
@@ -106,7 +112,7 @@
     </div>
     <div class="content">
         <h1>Background Changer</h1>
-        <p>Upload your image (under 2MB) and get it processed with a Mira character background.</p>
+        <p>Upload your image (under 2MB) and get it placed on a Mira-themed background with signature style.</p>
 
         <input type="file" id="fileInput" accept="image/*" style="display: none;" />
         <button class="upload-btn" id="uploadBtn" onclick="document.getElementById('fileInput').click();">UPLOAD IMAGE</button>
@@ -114,7 +120,7 @@
         <div id="imageContainer" class="result-img" style="display: none;">
             <img id="processedImage" src="" alt="Processed Image" style="max-width: 100%;"/>
             <br/>
-            <a id="downloadLink" class="action-btn" download="mira_image.png">DOWNLOAD IMAGE</a>
+            <a id="downloadLink" class="action-btn" download="mira_image.jpg">DOWNLOAD IMAGE</a>
             <a href="https://x.com/Mira_Network" target="_blank" class="action-btn">SHARE ON X</a>
         </div>
 
@@ -144,7 +150,7 @@
                     img.onload = () => {
                         const canvas = document.createElement('canvas');
                         const ctx = canvas.getContext('2d');
-                        const maxWidth = 1024; // Limit resolution
+                        const maxWidth = 1024;
                         const maxHeight = 1024;
                         let width = img.width;
                         let height = img.height;
@@ -156,7 +162,7 @@
                         canvas.width = width;
                         canvas.height = height;
                         ctx.drawImage(img, 0, 0, width, height);
-                        canvas.toBlob((blob) => resolve(new File([blob], file.name, { type: 'image/png' })), 'image/png', 0.7);
+                        canvas.toBlob((blob) => resolve(new File([blob], file.name, { type: 'image/jpeg' })), 'image/jpeg', 0.7);
                     };
                 };
                 reader.readAsDataURL(file);
@@ -167,14 +173,12 @@
             const file = fileInput.files[0];
             if (!file) return;
 
-            // Validate size
             if (file.size > 2 * 1024 * 1024) {
-                statusText.textContent = 'Error: Image must be under 2MB';
+                statusText.textContent = '❌ Error: Image must be under 2MB';
                 fileInput.value = '';
                 return;
             }
 
-            // Compress image
             uploadBtn.disabled = true;
             uploadBtn.textContent = 'COMPRESSING...';
             const compressedFile = await compressImage(file);
@@ -187,7 +191,7 @@
             formData.append('file', compressedFile);
 
             try {
-                const res = await fetch('./api/process', {
+                const res = await fetch('/api/process', {
                     method: 'POST',
                     body: formData
                 });
@@ -195,32 +199,25 @@
                 const data = await res.json();
 
                 if (data.image_url) {
-                    const imgCheck = new Promise((resolve, reject) => {
-                        processedImage.onload = () => resolve();
-                        processedImage.onerror = () => reject();
-                        processedImage.src = data.image_url;
-                    });
-
-                    try {
-                        await imgCheck;
+                    processedImage.onload = () => {
                         downloadLink.href = data.image_url;
                         imageContainer.style.display = 'block';
-                        statusText.textContent = 'Done! 🎉';
-                    } catch {
-                        statusText.textContent = 'Error: Processed image is no longer available 😢';
-                    }
+                        statusText.textContent = '✅ Done! 🎉';
+                    };
+                    processedImage.onerror = () => {
+                        statusText.textContent = '❌ Error: Processed image is not available';
+                    };
+                    processedImage.src = data.image_url;
                 } else {
-                    statusText.textContent = 'Error: ' + (data.error || 'Unknown');
+                    statusText.textContent = '❌ Error: ' + (data.error || 'Unknown error');
                 }
             } catch (err) {
-                statusText.textContent = 'Failed to process image 😢';
                 console.error(err);
+                statusText.textContent = '❌ Failed to process image';
             } finally {
                 uploadBtn.disabled = false;
                 uploadBtn.textContent = 'UPLOAD IMAGE';
                 fileInput.value = '';
-                // Rate-limit: Re-enable button after 5 seconds
-                setTimeout(() => { uploadBtn.disabled = false; }, 5000);
             }
         });
     </script>
