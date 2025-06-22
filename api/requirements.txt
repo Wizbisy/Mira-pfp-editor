@@ -3,3 +3,4 @@ gunicorn
 opencv-python-headless
 Pillow
 Flask-Cors
+numpy
