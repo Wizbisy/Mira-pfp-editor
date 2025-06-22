@@ -1,5 +1,5 @@
 Flask
 gunicorn
-opencv-python
+opencv-python-headless
 Pillow
 Flask-Cors
