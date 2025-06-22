@@ -5,12 +5,77 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Mira Background Changer</title>
   <style>
-    body { font-family: Arial; text-align: center; }
-    .logo { width: 100px; }
+    body {
+      font-family: Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      background-color: #f0f0f0;
+      margin: 0;
+      padding: 20px;
+    }
+    .container {
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+      text-align: center;
+      width: 100%;
+      max-width: 500px;
+    }
+    input[type="file"] {
+      margin: 10px 0;
+    }
+    button {
+      background-color: #4CAF50;
+      color: white;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #45a049;
+    }
+    #result {
+      max-width: 100%;
+      margin-top: 20px;
+      border-radius: 5px;
+    }
+    .logo {
+      width: 100px;
+      height: auto;
+      border-radius: 10px;
+      margin-bottom: 20px;
+    }
   </style>
 </head>
 <body>
-  <img src="/static/logo.svg" alt="Mira Logo" class="logo">
-  <h2>Mira Background Changer</h2>
+  <div class="container">
+    <img src="/static/logo.svg" alt="Mira Logo" class="logo">
+    <h2>Mira Background Changer</h2>
+    <input type="file" id="fileInput" accept="image/*">
+    <button onclick="uploadImage()">Upload</button>
+    <img id="result" style="max-width: 100%;">
+  </div>
+  <script>
+    function uploadImage() {
+      const fileInput = document.getElementById('fileInput');
+      const file = fileInput.files[0];
+      const formData = new FormData();
+      formData.append('file', file);
+
+      fetch('/api/process', {
+        method: 'POST',
+        body: formData
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.image_url) document.getElementById('result').src = data.image_url;
+        else alert(data.error || 'Error processing image');
+      })
+      .catch(error => console.error('Error:', error));
+    }
+  </script>
 </body>
 </html>
