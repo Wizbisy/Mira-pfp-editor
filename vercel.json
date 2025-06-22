@@ -5,8 +5,5 @@
   ],
   "routes": [
     { "src": "/(.*)", "dest": "api/app.py" }
-  ],
-  "routes": [
-    { "src": "/(.*)", "dest": "index.html" }
   ]
 }
