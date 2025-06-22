@@ -56,6 +56,11 @@
             background-color: #00cc7a;
         }
 
+        .upload-btn:disabled {
+            background-color: #7f8c8d;
+            cursor: not-allowed;
+        }
+
         .result-img {
             max-width: 100%;
             background-color: rgba(0, 0, 0, 0.5);
@@ -104,7 +109,7 @@
         <p>Upload your image and get it processed with a Mira character background.</p>
 
         <input type="file" id="fileInput" accept="image/*" style="display: none;" />
-        <button class="upload-btn" onclick="document.getElementById('fileInput').click();">UPLOAD IMAGE</button>
+        <button class="upload-btn" id="uploadBtn" onclick="document.getElementById('fileInput').click();">UPLOAD IMAGE</button>
 
         <div id="imageContainer" class="result-img" style="display: none;">
             <img id="processedImage" src="" alt="Processed Image" style="max-width: 100%;"/>
@@ -128,11 +133,15 @@
         const imageContainer = document.getElementById('imageContainer');
         const downloadLink = document.getElementById('downloadLink');
         const statusText = document.getElementById('statusText');
+        const uploadBtn = document.getElementById('uploadBtn'); // Added for button control
 
         fileInput.addEventListener('change', async () => {
             const file = fileInput.files[0];
             if (!file) return;
 
+            // Disable button and show processing
+            uploadBtn.disabled = true;
+            uploadBtn.textContent = 'PROCESSING...';
             statusText.textContent = 'Processing... please wait ⏳';
             imageContainer.style.display = 'none';
 
@@ -148,16 +157,32 @@
                 const data = await res.json();
 
                 if (data.image_url) {
-                    processedImage.src = data.image_url;
-                    downloadLink.href = data.image_url;
-                    imageContainer.style.display = 'block';
-                    statusText.textContent = 'Done! 🎉';
+                    // Check if image is accessible
+                    const imgCheck = new Promise((resolve, reject) => {
+                        processedImage.onload = () => resolve();
+                        processedImage.onerror = () => reject();
+                        processedImage.src = data.image_url;
+                    });
+
+                    try {
+                        await imgCheck;
+                        downloadLink.href = data.image_url;
+                        imageContainer.style.display = 'block';
+                        statusText.textContent = 'Done! 🎉';
+                    } catch {
+                        statusText.textContent = 'Error: Processed image is no longer available 😢';
+                    }
                 } else {
                     statusText.textContent = 'Error: ' + (data.error || 'Unknown');
                 }
             } catch (err) {
                 statusText.textContent = 'Failed to process image 😢';
                 console.error(err);
+            } finally {
+                // Re-enable button and reset input
+                uploadBtn.disabled = false;
+                uploadBtn.textContent = 'UPLOAD IMAGE';
+                fileInput.value = ''; // Clear file input
             }
         });
     </script>
