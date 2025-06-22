@@ -102,7 +102,7 @@
 </head>
 <body>
     <div class="header">
-        <img src="https://mira-background.onrender.com/static/logo.svg" alt="Logo" class="logo">
+        <img src="/logo.svg" alt="Logo" class="logo">
     </div>
     <div class="content">
         <h1>Background Changer</h1>
@@ -133,13 +133,12 @@
         const imageContainer = document.getElementById('imageContainer');
         const downloadLink = document.getElementById('downloadLink');
         const statusText = document.getElementById('statusText');
-        const uploadBtn = document.getElementById('uploadBtn'); // Added for button control
+        const uploadBtn = document.getElementById('uploadBtn');
 
         fileInput.addEventListener('change', async () => {
             const file = fileInput.files[0];
             if (!file) return;
 
-            // Disable button and show processing
             uploadBtn.disabled = true;
             uploadBtn.textContent = 'PROCESSING...';
             statusText.textContent = 'Processing... please wait ⏳';
@@ -157,7 +156,6 @@
                 const data = await res.json();
 
                 if (data.image_url) {
-                    // Check if image is accessible
                     const imgCheck = new Promise((resolve, reject) => {
                         processedImage.onload = () => resolve();
                         processedImage.onerror = () => reject();
@@ -179,10 +177,9 @@
                 statusText.textContent = 'Failed to process image 😢';
                 console.error(err);
             } finally {
-                // Re-enable button and reset input
                 uploadBtn.disabled = false;
                 uploadBtn.textContent = 'UPLOAD IMAGE';
-                fileInput.value = ''; // Clear file input
+                fileInput.value = '';
             }
         });
     </script>
