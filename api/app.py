@@ -7,7 +7,7 @@ from PIL import Image
 from tempfile import NamedTemporaryFile
 from flask import Flask, request, jsonify, send_file, send_from_directory
 from flask_cors import CORS
-from rembg import remove
+import requests
 
 app = Flask(__name__)
 CORS(app)
@@ -22,6 +22,9 @@ INDEX_HTML_PATH = os.path.join(ROOT_DIR, "index.html")
 BACKGROUND_PATH = os.path.join(STATIC_FOLDER, "custom_background.jpg")
 CHARACTER_PATH = os.path.join(STATIC_FOLDER, "character.png")
 
+REMOVE_BG_API_KEY = os.environ.get("REMOVE_BG_API_KEY")  # Make sure to set this in your environment
+REMOVE_BG_API_URL = "https://api.remove.bg/v1.0/removebg"
+
 # Ensure folders exist
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(OUTPUT_FOLDER, exist_ok=True)
@@ -33,25 +36,39 @@ def cleanup_old_files(folder, max_age_seconds=3600):
         if os.path.isfile(path) and os.path.getmtime(path) < now - max_age_seconds:
             os.remove(path)
 
-def remove_background(image_path):
-    input_image = Image.open(image_path).convert("RGBA")
-    output_image = remove(input_image)
+def remove_background_with_removebg(image_path):
+    with open(image_path, 'rb') as image_file:
+        response = requests.post(
+            REMOVE_BG_API_URL,
+            files={"image_file": image_file},
+            data={"size": "preview"},
+            headers={"X-Api-Key": REMOVE_BG_API_KEY},
+        )
+        if response.status_code != 200:
+            raise Exception(f"Remove.bg API error: {response.status_code} {response.text}")
 
-    output_np = np.array(output_image)
-    h, w = output_np.shape[:2]
+        with NamedTemporaryFile(delete=False, suffix=".png") as temp_result:
+            temp_result.write(response.content)
+            result_path = temp_result.name
 
-    # Read background
+    return result_path
+
+def blend_with_background(foreground_path):
+    fg_image = Image.open(foreground_path).convert("RGBA")
+    fg_np = np.array(fg_image)
+    h, w = fg_np.shape[:2]
+
+    # Load and resize background
     if not os.path.exists(BACKGROUND_PATH):
         raise FileNotFoundError("custom_background.jpg not found")
     background = cv2.imread(BACKGROUND_PATH)
     background = cv2.resize(background, (w, h))
 
-    # Composite with alpha
-    alpha = output_np[:, :, 3] / 255.0
+    alpha = fg_np[:, :, 3] / 255.0
     alpha_3c = cv2.merge([alpha] * 3)
-    foreground = output_np[:, :, :3]
+    foreground_rgb = fg_np[:, :, :3]
 
-    blended = (alpha_3c * foreground + (1 - alpha_3c) * background).astype(np.uint8)
+    blended = (alpha_3c * foreground_rgb + (1 - alpha_3c) * background).astype(np.uint8)
 
     # Add character overlay
     if os.path.exists(CHARACTER_PATH):
@@ -65,7 +82,7 @@ def remove_background(image_path):
             x = w - new_width - 20
             y = h - new_height - 20
             alpha_c = character[:, :, 3] / 255.0
-            alpha_c_3c = cv2.merge([alpha_c, alpha_c, alpha_c])
+            alpha_c_3c = cv2.merge([alpha_c] * 3)
 
             for c in range(3):
                 blended[y:y+new_height, x:x+new_width, c] = (
@@ -108,8 +125,11 @@ def process_image():
         temp_file = NamedTemporaryFile(delete=False, dir=UPLOAD_FOLDER)
         file.save(temp_file.name)
 
-        final_image = remove_background(temp_file.name)
+        removed_path = remove_background_with_removebg(temp_file.name)
+        final_image = blend_with_background(removed_path)
+
         os.remove(temp_file.name)
+        os.remove(removed_path)
 
         filename = f"{uuid.uuid4().hex}.jpg"
         output_path = os.path.join(OUTPUT_FOLDER, filename)
