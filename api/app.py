@@ -8,6 +8,7 @@ from tempfile import NamedTemporaryFile
 from flask import Flask, request, jsonify, send_file, send_from_directory
 from flask_cors import CORS
 import requests
+from itertools import cycle
 
 app = Flask(__name__)
 CORS(app)
@@ -22,7 +23,12 @@ INDEX_HTML_PATH = os.path.join(ROOT_DIR, "index.html")
 BACKGROUND_PATH = os.path.join(STATIC_FOLDER, "custom_background.jpg")
 CHARACTER_PATH = os.path.join(STATIC_FOLDER, "character.png")
 
-REMOVE_BG_API_KEY = os.environ.get("REMOVE_BG_API_KEY")
+# Load API keys for remove.bg from environment variables
+REMOVE_BG_KEYS = [
+    os.getenv(f"REMOVE_BG_KEY_{i}") for i in range(1, 21)
+]
+REMOVE_BG_KEYS = [key for key in REMOVE_BG_KEYS if key]
+key_cycle = cycle(REMOVE_BG_KEYS)
 REMOVE_BG_API_URL = "https://api.remove.bg/v1.0/removebg"
 
 # Ensure folders exist
@@ -37,21 +43,27 @@ def cleanup_old_files(folder, max_age_seconds=3600):
             os.remove(path)
 
 def remove_background_with_removebg(image_path):
-    with open(image_path, 'rb') as image_file:
-        response = requests.post(
-            REMOVE_BG_API_URL,
-            files={"image_file": image_file},
-            data={"size": "preview"},
-            headers={"X-Api-Key": REMOVE_BG_API_KEY},
-        )
-        if response.status_code != 200:
-            raise Exception(f"Remove.bg API error: {response.status_code} {response.text}")
-
-        with NamedTemporaryFile(delete=False, suffix=".png") as temp_result:
-            temp_result.write(response.content)
-            result_path = temp_result.name
-
-    return result_path
+    for _ in range(len(REMOVE_BG_KEYS)):
+        current_key = next(key_cycle)
+        try:
+            with open(image_path, 'rb') as image_file:
+                response = requests.post(
+                    REMOVE_BG_API_URL,
+                    files={"image_file": image_file},
+                    data={"size": "preview"},
+                    headers={"X-Api-Key": current_key},
+                )
+                if response.status_code == 200:
+                    with NamedTemporaryFile(delete=False, suffix=".png") as temp_result:
+                        temp_result.write(response.content)
+                        return temp_result.name
+                elif response.status_code == 402:
+                    continue  # quota exceeded for this key, try next
+                else:
+                    raise Exception(f"Remove.bg API error: {response.status_code} {response.text}")
+        except Exception as e:
+            continue
+    raise Exception("All API keys exhausted or failed.")
 
 def blend_with_background(foreground_path):
     fg_image = Image.open(foreground_path).convert("RGBA")
@@ -61,12 +73,10 @@ def blend_with_background(foreground_path):
     # Add character overlay
     if os.path.exists(CHARACTER_PATH):
         character = Image.open(CHARACTER_PATH).convert("RGBA")
-        scale = 0.35  # increased size slightly
+        scale = 0.35
         new_width = int(fg_image.width * scale)
         new_height = int(character.height * (new_width / character.width))
         character = character.resize((new_width, new_height))
-
-        # moved slightly right and downward
         x = fg_image.width - new_width - 10
         y = fg_image.height - new_height - 10
         combined.paste(character, (x, y), character)
