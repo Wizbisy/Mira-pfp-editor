@@ -1,7 +1,7 @@
-Flask
-torch
-torchvision
-opencv-python-headless
-Pillow
-numpy
+flask
 flask-cors
+rembg
+onnxruntime
+Pillow
+opencv-python-headless
+numpy
