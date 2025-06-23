@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Mira Background Changer</title>
+  <title>Mira Pfp Editor</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@700&display=swap');
@@ -13,6 +13,16 @@
       background-color: #1a2525;
       color: #fff;
       text-align: center;
+    }
+
+    .click-animate {
+      cursor: pointer;
+      transition: filter 0.2s ease, transform 0.2s ease;
+    }
+
+    .click-animate:active {
+      filter: invert(1);
+      transform: scale(0.96);
     }
 
     .header {
@@ -47,9 +57,9 @@
       transition: color 0.3s;
     }
 
-    .nav-icons a:active,
     .nav-icons a:hover {
       color: #1a2525;
+      text-decoration: underline;
     }
 
     .nav-icons a svg path {
@@ -57,25 +67,20 @@
       transition: fill 0.3s;
     }
 
-    .nav-icons a:active svg path,
     .nav-icons a:hover svg path {
       fill: #1a2525;
     }
 
-    .nav-icons a:hover {
-      text-decoration: underline;
-    }
-
     .content {
-      padding: 50px 20px;
+      padding: 40px 20px;
       max-width: 600px;
       margin: 0 auto;
     }
 
     h1 {
-      font-size: 2em;
+      font-size: 1.5em;
       color: #00ff95;
-      margin: 10px 0;
+      margin: 8px 0;
       text-transform: uppercase;
     }
 
@@ -144,8 +149,8 @@
 
   <div class="header">
     <div class="logo">
-      <!-- Mira SVG Logo -->
-      <svg width="52" height="16" viewBox="0 0 52 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <!-- Mira SVG Logo with click effect -->
+      <svg class="click-animate" width="110" height="auto" viewBox="0 0 52 16" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path d="M8.5759 1.35667L10.5401 0.187378L15.483 7.53556L13.7176 8.59444V11.0434H13.3643L8.5759 3.9161V1.35667Z" fill="white"/>
         <path d="M4.40582 3.54183L6.36999 2.37254L11.313 9.72072L9.54753 10.7796V13.2286H9.19421L4.40582 6.10126V3.54183Z" fill="white"/>
         <path d="M0.257812 5.72583L2.22198 4.55654L7.16495 11.9047L5.39952 12.9636V15.4126H5.0462L0.257812 8.28526V5.72583Z" fill="white"/>
@@ -175,15 +180,15 @@
   </div>
 
   <div class="content">
-    <h1>Background Changer</h1>
-    <p>Upload your image (under 2MB) and get it processed with a Mira character background.</p>
+    <h1 class="click-animate">Mira pfp editor</h1>
+    <p class="click-animate">Upload your pfp (under 2MB), and get your mira customized pfp.</p>
     <input type="file" id="fileInput" accept="image/*" style="display: none;" />
-    <button class="upload-btn" id="uploadBtn" onclick="document.getElementById('fileInput').click();">UPLOAD IMAGE</button>
+    <button class="upload-btn click-animate" id="uploadBtn" onclick="document.getElementById('fileInput').click();">UPLOAD IMAGE</button>
 
     <div id="imageContainer" class="result-img" style="display: none;">
       <img id="processedImage" src="" alt="Processed Image" style="max-width: 100%;" />
       <div class="button-row">
-        <a id="downloadLink" class="action-btn" download="mira_image.png">DOWNLOAD IMAGE</a>
+        <a id="downloadLink" class="action-btn click-animate" download="mira_image.png">DOWNLOAD IMAGE</a>
       </div>
     </div>
 
