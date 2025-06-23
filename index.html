@@ -1,9 +1,8 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Mira Background Changer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@700&display=swap');
 
@@ -17,15 +16,12 @@
     }
 
     .header {
-      padding: 30px 0;
+      padding: 20px;
       background-color: rgba(0, 0, 0, 0.7);
     }
 
-    .logo svg {
-      width: 160px;
-      height: auto;
-      display: block;
-      margin: 0 auto;
+    .logo {
+      height: 60px;
     }
 
     .content {
@@ -78,8 +74,9 @@
       padding: 10px 20px;
       border: none;
       cursor: pointer;
-      margin: 5px;
       font-weight: bold;
+      text-decoration: none;
+      display: inline-block;
     }
 
     .action-btn:hover {
@@ -92,15 +89,27 @@
       margin-top: 10px;
     }
 
-    a {
+    .links {
+      margin-top: 20px;
+    }
+
+    .links a {
       color: #00ff95;
       margin: 0 10px;
       text-decoration: none;
       font-weight: bold;
     }
 
-    a:hover {
+    .links a:hover {
       text-decoration: underline;
+    }
+
+    .button-row {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 10px;
     }
   </style>
 </head>
@@ -118,7 +127,7 @@
       </svg>
     </div>
   </div>
-
+  
   <div class="content">
     <h1>Background Changer</h1>
     <p>Upload your image (under 2MB) and get it processed with a Mira character background.</p>
@@ -128,9 +137,9 @@
 
     <div id="imageContainer" class="result-img" style="display: none;">
       <img id="processedImage" src="" alt="Processed Image" style="max-width: 100%;" />
-      <br />
-      <a id="downloadLink" class="action-btn" download="mira_image.png">DOWNLOAD IMAGE</a>
-      <a href="https://x.com/Mira_Network" target="_blank" class="action-btn">SHARE ON X</a>
+      <div class="button-row">
+        <a id="downloadLink" class="action-btn" download="mira_image.png">DOWNLOAD IMAGE</a>
+      </div>
     </div>
 
     <div class="generated" id="statusText"></div>
@@ -150,6 +159,34 @@
     const statusText = document.getElementById('statusText');
     const uploadBtn = document.getElementById('uploadBtn');
 
+    async function compressImage(file) {
+      return new Promise((resolve) => {
+        const img = new Image();
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          img.src = e.target.result;
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            const maxWidth = 1024;
+            const maxHeight = 1024;
+            let width = img.width;
+            let height = img.height;
+            if (width > maxWidth || height > maxHeight) {
+              const ratio = Math.min(maxWidth / width, maxHeight / height);
+              width *= ratio;
+              height *= ratio;
+            }
+            canvas.width = width;
+            canvas.height = height;
+            ctx.drawImage(img, 0, 0, width, height);
+            canvas.toBlob((blob) => resolve(new File([blob], file.name, { type: 'image/png' })), 'image/png', 0.7);
+          };
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
     fileInput.addEventListener('change', async () => {
       const file = fileInput.files[0];
       if (!file) return;
@@ -161,12 +198,15 @@
       }
 
       uploadBtn.disabled = true;
+      uploadBtn.textContent = 'COMPRESSING...';
+      const compressedFile = await compressImage(file);
+
       uploadBtn.textContent = 'PROCESSING...';
       statusText.textContent = 'Processing... please wait ⏳';
       imageContainer.style.display = 'none';
 
       const formData = new FormData();
-      formData.append('file', file);
+      formData.append('file', compressedFile);
 
       try {
         const res = await fetch('./api/process', {
@@ -177,15 +217,20 @@
         const data = await res.json();
 
         if (data.image_url) {
-          processedImage.onload = () => {
+          const imgCheck = new Promise((resolve, reject) => {
+            processedImage.onload = () => resolve();
+            processedImage.onerror = () => reject();
+            processedImage.src = data.image_url;
+          });
+
+          try {
+            await imgCheck;
             downloadLink.href = data.image_url;
             imageContainer.style.display = 'block';
             statusText.textContent = 'Done! 🎉';
-          };
-          processedImage.onerror = () => {
-            statusText.textContent = 'Error loading image 😢';
-          };
-          processedImage.src = data.image_url;
+          } catch {
+            statusText.textContent = 'Error: Processed image is no longer available 😢';
+          }
         } else {
           statusText.textContent = 'Error: ' + (data.error || 'Unknown');
         }
