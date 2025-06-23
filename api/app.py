@@ -22,7 +22,7 @@ INDEX_HTML_PATH = os.path.join(ROOT_DIR, "index.html")
 BACKGROUND_PATH = os.path.join(STATIC_FOLDER, "custom_background.jpg")
 CHARACTER_PATH = os.path.join(STATIC_FOLDER, "character.png")
 
-REMOVE_BG_API_KEY = os.environ.get("REMOVE_BG_API_KEY")  # Make sure to set this in your environment
+REMOVE_BG_API_KEY = os.environ.get("REMOVE_BG_API_KEY")
 REMOVE_BG_API_URL = "https://api.remove.bg/v1.0/removebg"
 
 # Ensure folders exist
@@ -68,7 +68,7 @@ def blend_with_background(foreground_path):
     alpha_3c = cv2.merge([alpha] * 3)
     foreground_rgb = fg_np[:, :, :3]
 
-    blended = (alpha_3c * foreground_rgb + (1 - alpha_3c) * background).astype(np.uint8)
+    blended = np.clip(alpha_3c * foreground_rgb + (1 - alpha_3c) * background, 0, 255).astype(np.uint8)
 
     # Add character overlay
     if os.path.exists(CHARACTER_PATH):
@@ -133,7 +133,7 @@ def process_image():
 
         filename = f"{uuid.uuid4().hex}.jpg"
         output_path = os.path.join(OUTPUT_FOLDER, filename)
-        cv2.imwrite(output_path, final_image)
+        Image.fromarray(final_image).save(output_path, format="JPEG")
 
         return jsonify({"image_url": f"/static/output/{filename}"})
     except Exception as e:
