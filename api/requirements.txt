@@ -1,6 +1,6 @@
 Flask
-gunicorn
+torch==1.12.1+cpu
+torchvision
 opencv-python-headless
 Pillow
-Flask-Cors
 numpy
