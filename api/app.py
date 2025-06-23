@@ -33,58 +33,49 @@ def cleanup_old_files(folder, max_age_seconds=3600):
             os.remove(path)
 
 def remove_background(image_path):
-    copy_static_files()
     image = cv2.imread(image_path)
     if image is None:
         raise ValueError("Failed to load image")
 
-    # Convert to grayscale
+    # Step 1: Generate mask of subject
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    _, binary = cv2.threshold(gray, 250, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    mask = np.zeros_like(gray)
+    cv2.drawContours(mask, contours, -1, 255, thickness=cv2.FILLED)
 
-    # Create binary mask using OTSU thresholding
-    _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    # Step 2: Extract subject
+    subject = cv2.bitwise_and(image, image, mask=mask)
 
-    # Invert mask to get foreground
-    binary = cv2.bitwise_not(binary)
-
-    # Improve mask with morphological operations
-    kernel = np.ones((5, 5), np.uint8)
-    binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel)
-    binary = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel)
-
-    # Apply Gaussian blur to soften edges
-    binary = cv2.GaussianBlur(binary, (5, 5), 0)
-
-    # Apply the mask to the image
-    result = cv2.bitwise_and(image, image, mask=binary)
-
-    # Load and resize background
+    # Step 3: Prepare new background
     if not os.path.exists(BACKGROUND_PATH):
-        raise FileNotFoundError("Custom background image not found")
+        raise FileNotFoundError("custom_background.jpg not found")
+    
     background = cv2.imread(BACKGROUND_PATH)
     background = cv2.resize(background, (image.shape[1], image.shape[0]))
 
-    # Blend background and result
-    inverse_mask = cv2.bitwise_not(binary)
-    background = cv2.bitwise_and(background, background, mask=inverse_mask)
-    final_result = cv2.add(result, background)
+    # Step 4: Mask the background and combine
+    inverse_mask = cv2.bitwise_not(mask)
+    background_masked = cv2.bitwise_and(background, background, mask=inverse_mask)
+    final_result = cv2.add(subject, background_masked)
 
-    # Add character overlay if available
+    # Step 5: Add character overlay (if exists)
     if os.path.exists(CHARACTER_PATH):
         character = cv2.imread(CHARACTER_PATH, cv2.IMREAD_UNCHANGED)
         if character is not None and character.shape[2] == 4:
-            char_height, char_width = character.shape[:2]
-            scale_factor = 0.3
-            new_width = int(image.shape[1] * scale_factor)
-            new_height = int(char_height * (new_width / char_width))
-            character = cv2.resize(character, (new_width, new_height), cv2.INTER_AREA)
-            x, y = image.shape[1] - new_width - 20, image.shape[0] - new_height - 20
+            scale = 0.3
+            new_width = int(image.shape[1] * scale)
+            new_height = int(character.shape[0] * (new_width / character.shape[1]))
+            character = cv2.resize(character, (new_width, new_height))
 
+            x = image.shape[1] - new_width - 20
+            y = image.shape[0] - new_height - 20
             alpha = character[:, :, 3] / 255.0
+
             for c in range(3):
                 final_result[y:y+new_height, x:x+new_width, c] = (
-                    alpha * character[:, :, c] +
-                    (1 - alpha) * final_result[y:y+new_height, x:x+new_width, c]
+                    (1 - alpha) * final_result[y:y+new_height, x:x+new_width, c] +
+                    alpha * character[:, :, c]
                 )
 
     return final_result
