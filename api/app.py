@@ -61,12 +61,14 @@ def blend_with_background(foreground_path):
     # Add character overlay
     if os.path.exists(CHARACTER_PATH):
         character = Image.open(CHARACTER_PATH).convert("RGBA")
-        scale = 0.3
+        scale = 0.35  # increased size slightly
         new_width = int(fg_image.width * scale)
         new_height = int(character.height * (new_width / character.width))
         character = character.resize((new_width, new_height))
-        x = fg_image.width - new_width - 20
-        y = fg_image.height - new_height - 20
+
+        # moved slightly right and downward
+        x = fg_image.width - new_width - 10
+        y = fg_image.height - new_height - 10
         combined.paste(character, (x, y), character)
 
     return combined.convert("RGB")
