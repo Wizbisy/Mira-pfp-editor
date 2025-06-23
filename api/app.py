@@ -133,7 +133,7 @@ def process_image():
 
         filename = f"{uuid.uuid4().hex}.jpg"
         output_path = os.path.join(OUTPUT_FOLDER, filename)
-        Image.fromarray(final_image).save(output_path, format="JPEG")
+        Image.fromarray(cv2.cvtColor(final_image, cv2.COLOR_BGR2RGB)).save(output_path, format="JPEG")
 
         return jsonify({"image_url": f"/static/output/{filename}"})
     except Exception as e:
