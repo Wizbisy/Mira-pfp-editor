@@ -55,42 +55,21 @@ def remove_background_with_removebg(image_path):
 
 def blend_with_background(foreground_path):
     fg_image = Image.open(foreground_path).convert("RGBA")
-    fg_np = np.array(fg_image)
-    h, w = fg_np.shape[:2]
-
-    # Load and resize background
-    if not os.path.exists(BACKGROUND_PATH):
-        raise FileNotFoundError("custom_background.jpg not found")
-    background = cv2.imread(BACKGROUND_PATH)
-    background = cv2.resize(background, (w, h))
-
-    alpha = fg_np[:, :, 3] / 255.0
-    alpha_3c = cv2.merge([alpha] * 3)
-    foreground_rgb = fg_np[:, :, :3]
-
-    blended = np.clip(alpha_3c * foreground_rgb + (1 - alpha_3c) * background, 0, 255).astype(np.uint8)
+    background = Image.open(BACKGROUND_PATH).convert("RGBA").resize(fg_image.size)
+    combined = Image.alpha_composite(background, fg_image)
 
     # Add character overlay
     if os.path.exists(CHARACTER_PATH):
-        character = cv2.imread(CHARACTER_PATH, cv2.IMREAD_UNCHANGED)
-        if character is not None and character.shape[2] == 4:
-            scale = 0.3
-            new_width = int(w * scale)
-            new_height = int(character.shape[0] * (new_width / character.shape[1]))
-            character = cv2.resize(character, (new_width, new_height))
+        character = Image.open(CHARACTER_PATH).convert("RGBA")
+        scale = 0.3
+        new_width = int(fg_image.width * scale)
+        new_height = int(character.height * (new_width / character.width))
+        character = character.resize((new_width, new_height))
+        x = fg_image.width - new_width - 20
+        y = fg_image.height - new_height - 20
+        combined.paste(character, (x, y), character)
 
-            x = w - new_width - 20
-            y = h - new_height - 20
-            alpha_c = character[:, :, 3] / 255.0
-            alpha_c_3c = cv2.merge([alpha_c] * 3)
-
-            for c in range(3):
-                blended[y:y+new_height, x:x+new_width, c] = (
-                    (1 - alpha_c_3c[:, :, c]) * blended[y:y+new_height, x:x+new_width, c] +
-                    alpha_c_3c[:, :, c] * character[:, :, c]
-                )
-
-    return blended
+    return combined.convert("RGB")
 
 @app.route("/")
 def serve_index():
@@ -133,7 +112,7 @@ def process_image():
 
         filename = f"{uuid.uuid4().hex}.jpg"
         output_path = os.path.join(OUTPUT_FOLDER, filename)
-        Image.fromarray(cv2.cvtColor(final_image, cv2.COLOR_BGR2RGB)).save(output_path, format="JPEG")
+        final_image.save(output_path, format="JPEG")
 
         return jsonify({"image_url": f"/static/output/{filename}"})
     except Exception as e:
