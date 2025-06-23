@@ -1,3 +1,6 @@
-*.pyc
-__pycache__
-node_modules
+*.pth
+.git
+*.md
+tests/
+__pycache__/
+
