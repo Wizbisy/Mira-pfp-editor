@@ -7,9 +7,7 @@ from PIL import Image
 from tempfile import NamedTemporaryFile
 from flask import Flask, request, jsonify, send_file, send_from_directory
 from flask_cors import CORS
-import torch
-from torchvision import transforms
-from u2net import U2NETP  # Ensure this file is in your directory
+from rembg import remove
 
 app = Flask(__name__)
 CORS(app)
@@ -23,20 +21,10 @@ STATIC_FOLDER = os.path.join(ROOT_DIR, "static")
 INDEX_HTML_PATH = os.path.join(ROOT_DIR, "index.html")
 BACKGROUND_PATH = os.path.join(STATIC_FOLDER, "custom_background.jpg")
 CHARACTER_PATH = os.path.join(STATIC_FOLDER, "character.png")
-MODEL_PATH = os.path.join(BASE_DIR, "models", "u2netp.pth")
 
 # Ensure folders exist
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(OUTPUT_FOLDER, exist_ok=True)
-
-# Load U2Net model
-def load_u2netp_model():
-    model = U2NETP(3, 1)
-    model.load_state_dict(torch.load(MODEL_PATH, map_location='cpu'))
-    model.eval()
-    return model
-
-u2net_model = load_u2netp_model()
 
 def cleanup_old_files(folder, max_age_seconds=3600):
     now = time.time()
@@ -46,35 +34,24 @@ def cleanup_old_files(folder, max_age_seconds=3600):
             os.remove(path)
 
 def remove_background(image_path):
-    pil_image = Image.open(image_path).convert("RGB")
-    original_np = np.array(pil_image)
-    w, h = pil_image.size
+    input_image = Image.open(image_path).convert("RGBA")
+    output_image = remove(input_image)
 
-    transform = transforms.Compose([
-        transforms.Resize((320, 320)),
-        transforms.ToTensor(),
-    ])
-    input_tensor = transform(pil_image).unsqueeze(0)
+    output_np = np.array(output_image)
+    h, w = output_np.shape[:2]
 
-    with torch.no_grad():
-        d1, *_ = u2net_model(input_tensor)
-        mask = d1.squeeze().cpu().numpy()
-        mask = (mask - mask.min()) / (mask.max() - mask.min())
-        mask = cv2.resize(mask, (w, h))
-        alpha = mask.astype(np.float32)
-        alpha_3c = cv2.merge([alpha, alpha, alpha])
-
-    image = cv2.imread(image_path)
-    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB).astype(float)
-
+    # Read background
     if not os.path.exists(BACKGROUND_PATH):
         raise FileNotFoundError("custom_background.jpg not found")
     background = cv2.imread(BACKGROUND_PATH)
-    background = cv2.resize(background, (w, h)).astype(float)
+    background = cv2.resize(background, (w, h))
 
-    fg = cv2.multiply(alpha_3c, image)
-    bg = cv2.multiply(1.0 - alpha_3c, background)
-    result = cv2.add(fg, bg).astype(np.uint8)
+    # Composite with alpha
+    alpha = output_np[:, :, 3] / 255.0
+    alpha_3c = cv2.merge([alpha] * 3)
+    foreground = output_np[:, :, :3]
+
+    blended = (alpha_3c * foreground + (1 - alpha_3c) * background).astype(np.uint8)
 
     # Add character overlay
     if os.path.exists(CHARACTER_PATH):
@@ -91,12 +68,12 @@ def remove_background(image_path):
             alpha_c_3c = cv2.merge([alpha_c, alpha_c, alpha_c])
 
             for c in range(3):
-                result[y:y+new_height, x:x+new_width, c] = (
-                    (1 - alpha_c_3c[:, :, c]) * result[y:y+new_height, x:x+new_width, c] +
+                blended[y:y+new_height, x:x+new_width, c] = (
+                    (1 - alpha_c_3c[:, :, c]) * blended[y:y+new_height, x:x+new_width, c] +
                     alpha_c_3c[:, :, c] * character[:, :, c]
                 )
 
-    return result
+    return blended
 
 @app.route("/")
 def serve_index():
