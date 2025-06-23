@@ -37,37 +37,36 @@ def remove_background(image_path):
     if image is None:
         raise ValueError("Failed to load image")
 
-    mask = np.zeros(image.shape[:2], np.uint8)
+    height, width = image.shape[:2]
 
-    # Create models for GrabCut (required, but unused explicitly)
+    # Step 1: GrabCut mask
+    mask = np.zeros(image.shape[:2], np.uint8)
     bgdModel = np.zeros((1, 65), np.float64)
     fgdModel = np.zeros((1, 65), np.float64)
+    rect = (1, 1, width - 2, height - 2)
 
-    # Define initial rectangle for subject (covering whole image)
-    height, width = image.shape[:2]
-    rect = (1, 1, width-2, height-2)
-
-    # Apply GrabCut
     cv2.grabCut(image, mask, rect, bgdModel, fgdModel, 5, cv2.GC_INIT_WITH_RECT)
     mask2 = np.where((mask == 2) | (mask == 0), 0, 1).astype('uint8')
 
-    # Create soft alpha mask
-    blurred_mask = cv2.GaussianBlur(mask2 * 255, (7, 7), 0)
-    alpha = blurred_mask.astype(float) / 255.0
+    # Step 2: Smooth alpha mask
+    soft_mask = cv2.GaussianBlur(mask2 * 255, (7, 7), 0)
+    alpha = soft_mask.astype(float) / 255.0
+    alpha_3c = cv2.merge([alpha, alpha, alpha])  # <-- Fix: match 3 channels
 
-    # Extract foreground
-    fg = image.astype(float)
-    fg = cv2.multiply(alpha[:, :, np.newaxis], fg)
+    # Step 3: Prepare foreground and background
+    foreground = image.astype(float)
+    foreground = cv2.multiply(alpha_3c, foreground)
 
-    # Load and prepare background
+    if not os.path.exists(BACKGROUND_PATH):
+        raise FileNotFoundError("custom_background.jpg not found")
+
     background = cv2.imread(BACKGROUND_PATH)
-    background = cv2.resize(background, (width, height))
-    bg = cv2.multiply(1.0 - alpha[:, :, np.newaxis], background.astype(float))
+    background = cv2.resize(background, (width, height)).astype(float)
+    background = cv2.multiply(1.0 - alpha_3c, background)
 
-    # Blend foreground and background
-    final = cv2.add(fg, bg).astype(np.uint8)
+    blended = cv2.add(foreground, background).astype(np.uint8)
 
-    # Optional: Add character overlay
+    # Step 4: Add character overlay
     if os.path.exists(CHARACTER_PATH):
         character = cv2.imread(CHARACTER_PATH, cv2.IMREAD_UNCHANGED)
         if character is not None and character.shape[2] == 4:
@@ -76,17 +75,18 @@ def remove_background(image_path):
             new_height = int(character.shape[0] * (new_width / character.shape[1]))
             character = cv2.resize(character, (new_width, new_height))
 
-            x = width - new_width - 20
-            y = height - new_height - 20
+            x = max(0, width - new_width - 20)
+            y = max(0, height - new_height - 20)
             alpha_c = character[:, :, 3] / 255.0
+            alpha_c_3c = cv2.merge([alpha_c, alpha_c, alpha_c])
 
             for c in range(3):
-                final[y:y+new_height, x:x+new_width, c] = (
-                    (1 - alpha_c) * final[y:y+new_height, x:x+new_width, c] +
-                    alpha_c * character[:, :, c]
+                blended[y:y+new_height, x:x+new_width, c] = (
+                    (1 - alpha_c_3c[:, :, c]) * blended[y:y+new_height, x:x+new_width, c] +
+                    alpha_c_3c[:, :, c] * character[:, :, c]
                 )
 
-    return final
+    return blended
 
 @app.route("/")
 def serve_index():
