@@ -37,48 +37,56 @@ def remove_background(image_path):
     if image is None:
         raise ValueError("Failed to load image")
 
-    # Step 1: Generate mask of subject
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    _, binary = cv2.threshold(gray, 250, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
-    contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    mask = np.zeros_like(gray)
-    cv2.drawContours(mask, contours, -1, 255, thickness=cv2.FILLED)
+    mask = np.zeros(image.shape[:2], np.uint8)
 
-    # Step 2: Extract subject
-    subject = cv2.bitwise_and(image, image, mask=mask)
+    # Create models for GrabCut (required, but unused explicitly)
+    bgdModel = np.zeros((1, 65), np.float64)
+    fgdModel = np.zeros((1, 65), np.float64)
 
-    # Step 3: Prepare new background
-    if not os.path.exists(BACKGROUND_PATH):
-        raise FileNotFoundError("custom_background.jpg not found")
-    
+    # Define initial rectangle for subject (covering whole image)
+    height, width = image.shape[:2]
+    rect = (1, 1, width-2, height-2)
+
+    # Apply GrabCut
+    cv2.grabCut(image, mask, rect, bgdModel, fgdModel, 5, cv2.GC_INIT_WITH_RECT)
+    mask2 = np.where((mask == 2) | (mask == 0), 0, 1).astype('uint8')
+
+    # Create soft alpha mask
+    blurred_mask = cv2.GaussianBlur(mask2 * 255, (7, 7), 0)
+    alpha = blurred_mask.astype(float) / 255.0
+
+    # Extract foreground
+    fg = image.astype(float)
+    fg = cv2.multiply(alpha[:, :, np.newaxis], fg)
+
+    # Load and prepare background
     background = cv2.imread(BACKGROUND_PATH)
-    background = cv2.resize(background, (image.shape[1], image.shape[0]))
+    background = cv2.resize(background, (width, height))
+    bg = cv2.multiply(1.0 - alpha[:, :, np.newaxis], background.astype(float))
 
-    # Step 4: Mask the background and combine
-    inverse_mask = cv2.bitwise_not(mask)
-    background_masked = cv2.bitwise_and(background, background, mask=inverse_mask)
-    final_result = cv2.add(subject, background_masked)
+    # Blend foreground and background
+    final = cv2.add(fg, bg).astype(np.uint8)
 
-    # Step 5: Add character overlay (if exists)
+    # Optional: Add character overlay
     if os.path.exists(CHARACTER_PATH):
         character = cv2.imread(CHARACTER_PATH, cv2.IMREAD_UNCHANGED)
         if character is not None and character.shape[2] == 4:
             scale = 0.3
-            new_width = int(image.shape[1] * scale)
+            new_width = int(width * scale)
             new_height = int(character.shape[0] * (new_width / character.shape[1]))
             character = cv2.resize(character, (new_width, new_height))
 
-            x = image.shape[1] - new_width - 20
-            y = image.shape[0] - new_height - 20
-            alpha = character[:, :, 3] / 255.0
+            x = width - new_width - 20
+            y = height - new_height - 20
+            alpha_c = character[:, :, 3] / 255.0
 
             for c in range(3):
-                final_result[y:y+new_height, x:x+new_width, c] = (
-                    (1 - alpha) * final_result[y:y+new_height, x:x+new_width, c] +
-                    alpha * character[:, :, c]
+                final[y:y+new_height, x:x+new_width, c] = (
+                    (1 - alpha_c) * final[y:y+new_height, x:x+new_width, c] +
+                    alpha_c * character[:, :, c]
                 )
 
-    return final_result
+    return final
 
 @app.route("/")
 def serve_index():
