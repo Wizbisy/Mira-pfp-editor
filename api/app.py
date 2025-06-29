@@ -67,19 +67,35 @@ def remove_background_with_removebg(image_path):
 
 def blend_with_background(foreground_path):
     fg_image = Image.open(foreground_path).convert("RGBA")
-    background = Image.open(BACKGROUND_PATH).convert("RGBA").resize(fg_image.size)
-    combined = Image.alpha_composite(background, fg_image)
+    background = Image.open(BACKGROUND_PATH).convert("RGBA")
+
+    # Compute position to center the foreground on the background
+    bg_width, bg_height = background.size
+    fg_width, fg_height = fg_image.size
+
+    # Resize foreground if it's larger than background
+    if fg_width > bg_width or fg_height > bg_height:
+        scale = min(bg_width / fg_width, bg_height / fg_height)
+        fg_image = fg_image.resize((int(fg_width * scale), int(fg_height * scale)), Image.ANTIALIAS)
+        fg_width, fg_height = fg_image.size
+
+    x = (bg_width - fg_width) // 2
+    y = (bg_height - fg_height) // 2
+
+    # Paste foreground onto background
+    combined = background.copy()
+    combined.paste(fg_image, (x, y), fg_image)
 
     # Add character overlay
     if os.path.exists(CHARACTER_PATH):
         character = Image.open(CHARACTER_PATH).convert("RGBA")
         scale = 0.35
-        new_width = int(fg_image.width * scale)
+        new_width = int(bg_width * scale)
         new_height = int(character.height * (new_width / character.width))
         character = character.resize((new_width, new_height))
-        x = fg_image.width - new_width - 10
-        y = fg_image.height - new_height - 10
-        combined.paste(character, (x, y), character)
+        char_x = bg_width - new_width - 10
+        char_y = bg_height - new_height - 10
+        combined.paste(character, (char_x, char_y), character)
 
     return combined.convert("RGB")
 
