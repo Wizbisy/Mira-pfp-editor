@@ -1,7 +1,7 @@
 import os
 import uuid
 import time
-import cv2
+import cv2        
 import numpy as np
 from PIL import Image
 from tempfile import NamedTemporaryFile
@@ -13,7 +13,6 @@ from itertools import cycle
 app = Flask(__name__)
 CORS(app)
 
-# Directory paths
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.abspath(os.path.join(BASE_DIR, ".."))
 UPLOAD_FOLDER = os.path.join("/tmp", "uploads")
@@ -23,92 +22,77 @@ INDEX_HTML_PATH = os.path.join(ROOT_DIR, "index.html")
 BACKGROUND_PATH = os.path.join(STATIC_FOLDER, "custom_background.jpg")
 CHARACTER_PATH = os.path.join(STATIC_FOLDER, "character.png")
 
-# Load API keys for remove.bg from environment variables
-REMOVE_BG_KEYS = [
-    os.getenv(f"REMOVE_BG_KEY_{i}") for i in range(1, 21)
-]
-REMOVE_BG_KEYS = [key for key in REMOVE_BG_KEYS if key]
+REMOVE_BG_KEYS = [os.getenv(f"REMOVE_BG_KEY_{i}") for i in range(1, 21)]
+REMOVE_BG_KEYS = [k for k in REMOVE_BG_KEYS if k]
 key_cycle = cycle(REMOVE_BG_KEYS)
 REMOVE_BG_API_URL = "https://api.remove.bg/v1.0/removebg"
 
-# Ensure folders exist
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 
-def cleanup_old_files(folder, max_age_seconds=3600):
+def cleanup_old_files(folder, max_age=3600):
     now = time.time()
-    for filename in os.listdir(folder):
-        path = os.path.join(folder, filename)
-        if os.path.isfile(path) and os.path.getmtime(path) < now - max_age_seconds:
-            os.remove(path)
+    for f in os.listdir(folder):
+        p = os.path.join(folder, f)
+        if os.path.isfile(p) and os.path.getmtime(p) < now - max_age:
+            os.remove(p)
 
-def remove_background_with_removebg(image_path):
+def remove_background(image_path):
     for _ in range(len(REMOVE_BG_KEYS)):
-        current_key = next(key_cycle)
-        try:
-            with open(image_path, 'rb') as image_file:
-                response = requests.post(
-                    REMOVE_BG_API_URL,
-                    files={"image_file": image_file},
-                    data={"size": "preview"},
-                    headers={"X-Api-Key": current_key},
-                )
-                if response.status_code == 200:
-                    with NamedTemporaryFile(delete=False, suffix=".png") as temp_result:
-                        temp_result.write(response.content)
-                        return temp_result.name
-                elif response.status_code == 402:
-                    continue  # quota exceeded for this key, try next
-                else:
-                    raise Exception(f"Remove.bg API error: {response.status_code} {response.text}")
-        except Exception as e:
-            continue
-    raise Exception("All API keys exhausted or failed.")
+        key = next(key_cycle)
+        with open(image_path, "rb") as img:
+            res = requests.post(
+                REMOVE_BG_API_URL,
+                files={"image_file": img},
+                data={"size": "preview"},
+                headers={"X-Api-Key": key},
+            )
+        if res.status_code == 200:
+            with NamedTemporaryFile(delete=False, suffix=".png") as tmp:
+                tmp.write(res.content)
+                return tmp.name
+        if res.status_code != 402:
+            break
+    raise Exception("remove.bg failed or keys exhausted")
 
 def blend_with_background(foreground_path):
-    fg_image = Image.open(foreground_path).convert("RGBA")
-    background = Image.open(BACKGROUND_PATH).convert("RGBA")
+    fg = Image.open(foreground_path).convert("RGBA")
+    bg = Image.open(BACKGROUND_PATH).convert("RGBA")
 
-    # Compute position to center the foreground on the background
-    bg_width, bg_height = background.size
-    fg_width, fg_height = fg_image.size
+    bw, bh = bg.size
+    fw, fh = fg.size
 
-    # Resize foreground if it's larger than background
-    if fg_width > bg_width or fg_height > bg_height:
-        scale = min(bg_width / fg_width, bg_height / fg_height)
-        fg_image = fg_image.resize((int(fg_width * scale), int(fg_height * scale)), Image.ANTIALIAS)
-        fg_width, fg_height = fg_image.size
+    scale = max(bw / fw, bh / fh)
+    scale = min(scale, 3.0)
+    fg = fg.resize((int(fw * scale), int(fh * scale)), Image.LANCZOS)
 
-    x = (bg_width - fg_width) // 2
-    y = (bg_height - fg_height) // 2
+    fw, fh = fg.size
+    x = (bw - fw) // 2
+    y = (bh - fh) // 2
 
-    # Paste foreground onto background
-    combined = background.copy()
-    combined.paste(fg_image, (x, y), fg_image)
+    out = bg.copy()
+    out.paste(fg, (x, y), fg)
 
-    # Add character overlay
     if os.path.exists(CHARACTER_PATH):
-        character = Image.open(CHARACTER_PATH).convert("RGBA")
-        scale = 0.35
-        new_width = int(bg_width * scale)
-        new_height = int(character.height * (new_width / character.width))
-        character = character.resize((new_width, new_height))
-        char_x = bg_width - new_width - 10
-        char_y = bg_height - new_height - 10
-        combined.paste(character, (char_x, char_y), character)
+        char = Image.open(CHARACTER_PATH).convert("RGBA")
+        c_scale = 0.35
+        cw = int(bw * c_scale)
+        ch = int(char.height * (cw / char.width))
+        char = char.resize((cw, ch))
+        out.paste(char, (bw - cw - 10, bh - ch - 10), char)
 
-    return combined.convert("RGB")
+    return out.convert("RGB")
 
 @app.route("/")
-def serve_index():
+def index():
     return send_file(INDEX_HTML_PATH)
 
 @app.route("/static/<path:path>")
-def serve_static(path):
+def static_proxy(path):
     return send_from_directory(STATIC_FOLDER, path)
 
 @app.route("/static/output/<filename>")
-def serve_output(filename):
+def output_proxy(filename):
     return send_file(os.path.join(OUTPUT_FOLDER, filename), mimetype="image/jpeg")
 
 @app.route("/api/process", methods=["POST"])
@@ -117,38 +101,38 @@ def process_image():
         cleanup_old_files(UPLOAD_FOLDER)
         cleanup_old_files(OUTPUT_FOLDER)
 
-        if 'file' not in request.files:
-            return jsonify({"error": "No file uploaded"}), 400
+        if "file" not in request.files:
+            return jsonify(error="No file uploaded"), 400
 
-        file = request.files['file']
+        file = request.files["file"]
         if not file.filename:
-            return jsonify({"error": "Empty filename"}), 400
+            return jsonify(error="Empty filename"), 400
 
         file.seek(0, os.SEEK_END)
         if file.tell() > 2 * 1024 * 1024:
-            return jsonify({"error": "Image must be under 2MB"}), 400
+            return jsonify(error="Image must be under 2 MB"), 400
         file.seek(0)
 
-        temp_file = NamedTemporaryFile(delete=False, dir=UPLOAD_FOLDER)
-        file.save(temp_file.name)
+        tmp = NamedTemporaryFile(delete=False, dir=UPLOAD_FOLDER)
+        file.save(tmp.name)
 
-        removed_path = remove_background_with_removebg(temp_file.name)
-        final_image = blend_with_background(removed_path)
+        fg_path = remove_background(tmp.name)
+        final_img = blend_with_background(fg_path)
 
-        os.remove(temp_file.name)
-        os.remove(removed_path)
+        os.remove(tmp.name)
+        os.remove(fg_path)
 
-        filename = f"{uuid.uuid4().hex}.jpg"
-        output_path = os.path.join(OUTPUT_FOLDER, filename)
-        final_image.save(output_path, format="JPEG")
+        out_name = f"{uuid.uuid4().hex}.jpg"
+        out_path = os.path.join(OUTPUT_FOLDER, out_name)
+        final_img.save(out_path, format="JPEG")
 
-        return jsonify({"image_url": f"/static/output/{filename}"})
+        return jsonify(image_url=f"/static/output/{out_name}")
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify(error=str(e)), 500
 
 @app.route("/api/hello")
 def hello():
-    return jsonify({"message": "Mira API is live ✅"}), 200
+    return jsonify(message="Mira API is live ✅")
 
 if __name__ == "__main__":
     app.run(debug=True)
