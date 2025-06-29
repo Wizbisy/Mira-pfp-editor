@@ -1,7 +1,7 @@
 import os
 import uuid
 import time
-import cv2        
+import cv2
 import numpy as np
 from PIL import Image
 from tempfile import NamedTemporaryFile
@@ -62,9 +62,16 @@ def blend_with_background(foreground_path):
     bw, bh = bg.size
     fw, fh = fg.size
 
-    scale = max(bw / fw, bh / fh)
-    scale = min(scale, 3.0)
-    fg = fg.resize((int(fw * scale), int(fh * scale)), Image.LANCZOS)
+    ratio = max(fw / bw, fh / bh)
+    target = 0.75
+    tol = 0.1
+
+    if ratio < target - tol:
+        scale = min(target / ratio, 3.0)
+        fg = fg.resize((int(fw * scale), int(fh * scale)), Image.LANCZOS)
+    elif ratio > target + tol:
+        scale = target / ratio
+        fg = fg.resize((int(fw * scale), int(fh * scale)), Image.LANCZOS)
 
     fw, fh = fg.size
     x = (bw - fw) // 2
